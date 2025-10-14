@@ -5,13 +5,22 @@ library(stringr)
 library(tidytext)  
 library(textstem)  
 library(tokenizers) 
-library(reshape2) 
-library(wordcloud)
 
 ###---Input---###
 df <- read_csv('data/reviews.csv')
 
 ###---Processing---###
+
+# Add manual column with positive, negative, neutral rating based on stars
+
+df <- df %>% 
+  rowid_to_column('id') %>% 
+  mutate(
+    sentiment_star = case_when(
+    score < 3 ~ 'negative',
+    score == 3 ~ 'neutral',
+    score > 3 ~ 'positive'
+  ))
 
 # Add columns with number of words/characters
 df <- df %>% 
@@ -86,3 +95,4 @@ tokens_stemmed <- tokens_no_stop %>%
 
 ###---Output---###
 write_csv(tokens_stemmed, 'data/tokenized_reviews.csv')
+write_csv(df, 'data/cleaned_reviews.csv')
