@@ -536,4 +536,53 @@ gymshark_neg_reviews_gamma <-
 
 
 
+# --- get top FREX keywords per topic from an STM model ---
+top_frex_terms <- function(model, n_terms = 4) {
+  lt <- labelTopics(model, n = n_terms)        # lt$frex is K x n_terms
+  # return a list of character vectors, one per topic
+  apply(lt$frex, 1, function(row) row[!is.na(row)])
+}
+
+# --- call local Ollama to get a short label for one topic ---
+ollama_label_once <- function(keywords, model = "mistral", max_tokens = 16, timeout_sec = 60) {
+  prompt <- paste0(
+    "Return a concise 2-4 word topic label. Only the label, no punctuation.\n",
+    "Keywords: ", paste(keywords, collapse = ", ")
+  )
+  
+  req <- request("http://localhost:11434/api/generate") |>
+    req_body_json(list(
+      model  = model,
+      prompt = prompt,
+      stream = FALSE,
+      options = list(num_predict = max_tokens)
+    )) |>
+    req_timeout(timeout_sec) |>
+    req_error(is_error = function(resp) FALSE)
+  
+  resp <- req_perform(req)
+  
+  # parse
+  out <- tryCatch(resp_body_json(resp, simplifyVector = TRUE), error = function(e) NULL)
+  lbl <- if (is.null(out)) "" else trimws(out$response)
+  
+  # light cleanup: keep readable label tokens
+  lbl <- gsub("[^[:alnum:] /&-]", "", lbl)
+  lbl <- gsub("\\s+", " ", lbl)
+  if (identical(lbl, "")) "Misc" else lbl
+}
+
+# --- label all topics for a given STM model via Ollama ---
+label_topics_ollama <- function(model, n_terms = 4, lm = "mistral", sleep_sec = 0.2) {
+  terms_list <- top_frex_terms(model, n_terms)
+  labs <- map_chr(terms_list, function(kw) {
+    lab <- ollama_label_once(kw, model = lm)
+    Sys.sleep(sleep_sec)   # be polite to the local server
+    lab
+  })
+  tibble(topic = seq_along(labs), topic_name = labs)
+}
+
+adidas_pos_topic_names    <- label_topics_ollama(adidas_pos_topics,    n_terms = 4, lm = "mistral")
+
 
